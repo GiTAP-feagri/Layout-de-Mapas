@@ -1,0 +1,175 @@
+---
+title: "Layout"
+author: "Agda Loureiro"
+date: "6/11/2020"
+output: html_document
+---
+
+```{r}
+pacman::p_load(ggsn, ggplot2, sf,raster)
+```
+
+Openning data
+
+
+the interpolated data
+
+```{r}
+idw = raster("../deterministic-interpolation/maps/z_interpolated_idw.tif")
+idw.df = as.data.frame(idw, xy = T)
+idw.df = dplyr::rename(idw.df, z =  z_interpolated_idw)
+
+krigagem = raster("../gstat/maps/z_interpolated.tif")
+krig.df = as.data.frame(krigagem, xy = T)
+krig.df = dplyr::rename(krig.df, z = z_interpolated)
+```
+
+the boundary
+
+```{r}
+contorno <- shapefile("../deterministic-interpolation/data/boundary/cotorno.shp")
+
+#And then we create a grid
+
+r = raster::raster(contorno, res = 10) #  "res" sets pixel resolution
+
+rp = raster::rasterize(contorno, r, 0) 
+
+grid = as(rp, "SpatialPixelsDataFrame") 
+
+sp::plot(grid)
+
+```
+
+Plotting the map with sp
+
+First we insert our interpolated data into our grid and transform it into a sf object
+```{r}
+library(sf)
+grid$idw = idw.df$z
+grid$krigagem = krig.df$z
+grid = st_as_sf(grid)
+grid
+```
+Plot simples 
+
+```{r}
+plot(grid[c("idw", "krigagem")])
+```
+
+
+We can also use ggplot2 library
+
+```{r}
+# esquisse::esquisser()
+library(ggplot2)
+library(ggspatial)
+library(viridis)
+
+idw = ggplot(grid) +
+ aes(colour = idw) +
+ geom_sf(size = 1L) +
+  annotation_scale(location = "br", width_hint = 0.5, style = "bar") +
+    coord_sf(xlim = c(-180, 1500), ylim = c(-180, 1550), expand = T,datum = sf::st_crs(32722), label_graticule = waiver(),   clip = "on") +
+    xlab("Longitude") +
+   ylab("Latitude") + 
+ scale_color_viridis_c(option = "viridis") +
+ theme_bw()
+
+krigagem = ggplot(grid) +
+ aes(colour = krigagem) +
+ geom_sf(size = 1L) +
+  annotation_scale(location = "br", width_hint = 0.5, style = "bar") +
+    coord_sf(xlim = c(-180, 1500), ylim = c(-180, 1550), expand = T,datum = sf::st_crs(32722), label_graticule = waiver(),   clip = "on") +
+    xlab("Longitude") +
+   ylab("Latitude") + 
+ scale_color_viridis_c(option = "viridis") +
+ theme_bw()
+
+
+```
+
+```{r}
+library(cowplot)
+plot_grid(idw, krigagem, labels = "AUTO")
+```
+
+
+```{r}
+library(ggpubr)
+ggarrange(idw,krigagem, 
+          labels = "AUTO",
+          ncol = 2,
+          nrow = 1,  
+          align = "hv",
+          common.legend = TRUE)
+```
+
+spplot
+
+We can change intervals with sp package
+ - para esse pacote utilizamos os mapas empilhados no formato raster
+```{r}
+maps = stack(idw, krigagem)
+names(maps) = c("IDW", "OK")
+```
+
+```{r}
+library(colormap)
+viridis_colors <- colormap_pal(alpha = 1,
+                               colormap = colormaps$viridis,
+                               reverse = FALSE)
+```
+
+```{r}
+spplot(maps, colorkey=list(space="right"), col.regions= viridis_colors)
+layout.scale.bar(height = 1)
+```
+
+Or RasterVis 
+
+ 
+ 
+```{r}
+# devtools::install_github('oscarperpinan/rasterVis')
+library(rasterVis)
+library(lattice)
+pacman::p_load(mapmisc)
+```
+
+```{r}
+my.at <- c(0, seq (0.2, 1.7, by = 0.2), seq(1.7,5, by=1))
+levelplot(maps, at=my.at)
+```
+
+```{r}
+myColorkey <- list(at=my.at, ## where the colors change
+                   labels=list(
+                     at=my.at ## where to print labels
+                     ))
+levelplot(maps, at=my.at, colorkey=myColorkey)
+```
+
+```{r}
+library(viridis)
+## Customizing axis and title labels
+levelplot(maps, margin=FALSE,
+          names.attr=c('IDW', 'Krigagem'),
+          at=my.at, colorkey=myColorkey,
+          par.settings =viridisTheme(region = viridis(10)),#do pacote trellis
+          main=list('Mapas', col='red'),
+          xlab=list('Longitude',  fontface='bold'),
+          ylab=list('Latitude', rot=90, fontface='bold')
+          ) 
+```
+
+
+
+
+Usefull links:
+To ggplot themes: <https://ggplot2.tidyverse.org/reference/ggtheme.html>
+Viridis palettes: <https://cran.r-project.org/web/packages/viridis/vignettes/intro-to-viridis.html>
+RColorBrewer palletes: <http://www.nickeubank.com/wp-content/uploads/2015/10/RGIS3_MakingMaps_part1_mappingVectorData.html>
+To sp plots: <https://edzer.github.io/sp/>
+To colorspace palletes: <https://cran.r-project.org/web/packages/colorspace/vignettes/colorspace.html>
+
